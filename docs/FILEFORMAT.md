@@ -16,7 +16,8 @@ This is the main header for the archive and has basic information about how/when
 |reftar magic bytes|  |literal string|"reftar"
 |reftar archive version|2|int8| version is set to 1.
 |block size| 4 | int32| Block size in bytes - default is 4096|
-|Padding | n | padded with 0x00 to blocksize boundary 
+|Padding | n | 0x00 literal | padded with 0x00 to blocksize boundary 
+
 # Files
 Each file has a header, and 0-N extent/data sections
 
@@ -42,15 +43,15 @@ Each file has a header, and 0-N extent/data sections
 | Link Name | 4+n| size+char || Name of linked file (if symbolic link)
 | Extended permissions | 4+n | size+char | binary blob of extended permissions. This is verbatim from filesystem.
 | Source filesystem type | 128 | char | Indicates the source filesystem to allow confirmation for extended permissions
-| source Filesystem ID | int64 | UUID of source filesystem 
-| File Data | For files that are under block size
-| Padding | padded with 0x00 to blocksize boundary 
+| source Filesystem ID | 8 | int | UUID of source filesystem 
+| File Data | n | |For files that are under block size
+| Padding | n | 0x00 literal | padded with 0x00 to blocksize boundary 
 
 Following the file header, we have N extent sections, which may or may not include blocks
 
 ### extent header
 
-| Name | size | type | Notes |
+| Name | size (bytes) | type | Notes |
 | --- | --- | --- | --- |
 | extent ID | 8 | int | Unique ID of the extent within the file
 | length in blocks | 4 | int | Number of blocks - can be 0 for sparse references
@@ -67,4 +68,4 @@ Raw data - length in blocks * block length.  If the archive is created on the sa
 
 # Archive footer
 This is optional, but contains summary information about the archive
-# TODO
+TODO
