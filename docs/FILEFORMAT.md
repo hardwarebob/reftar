@@ -6,18 +6,19 @@ The reftar file format has the following requirements
 * Ability to stream the archive.
 * Ability to interrupt archive creation and retain what has been created so far.
 * Focus on modern support and flexibility over file size efficiency. UTF8 filename support.
- * type "sizestring" is two bytes of size, followed by that much data - supporting strings of a length up to 65k bytes (well beyond most systems supported lengths) 
 
 
 ```mermaid
-treemap-beta
-"Reftar Header"
-  "File Header"
-  "File Data (extents x  n) "
-    "Extent Header"
-    "Data (optional)"
- "File Footer"
-"Reftar Footer (optional)
+---
+title: "Reftar File"
+---
+packet
++10: "Magic and Archive Header"
++10: "File Header"
++3: "Extent Header"
++20: "Data (variable length)"
++3: "Extent Header"
++20: "Data (variable length)"
 ```
 
 
