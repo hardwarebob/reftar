@@ -1,19 +1,19 @@
 # Overview
 The reftar file format has the following requirements
-* 4k blocks and 4k alignment to support direct reflinking of files.
+* large blocks (4k or higher) and block alignment to support direct reflinking of files.
 * Superset of tar functionality
 * Ability to link extents in later files to files earlier in the archive
 * Ability to stream the archive.
 * Ability to interrupt archive creation and retain what has been created so far.
 * Focus on modern support and flexibility over file size efficiency. UTF8 filename support.
-
+All data is little endian.
 
 # Archive Header
 This is the main header for the archive and has basic information about how/when/where it was created. Inspired directly from the tar format, but expanded for modern contexts and usage.
 
 | Name  | size (bytes) | type  | Notes  | 
 |---|---|---|---|
-|reftar magic bytes|  |literal string|"reftar"
+|reftar magic bytes| 6 |literal string|"reftar"
 |reftar archive version|2|int8| version is set to 1.
 |block size| 4 | int32| Block size in bytes - default is 4096|
 |Padding | n | 0x00 literal | padded with 0x00 to blocksize boundary 
@@ -57,8 +57,8 @@ Following the file header, we have N extent sections, which may or may not inclu
 | length in blocks | 4 | int | Number of blocks - can be 0 for sparse references
 | Extent type | 1 | char | Extent type can be D (data), S (sparse) or R (reference - ) If block is a reference, the extent ID must match a previous existing extent in the file.
 | source extent start | 8 | int | Used when adding new files - the location of the block on the original filesystem.
-| checksum | 128 | TODO | Checksum for data blocks.  Empty for sparse extents or references.
-
+| checksum | 4 | CRC | Checksum for data blocks.  Empty for sparse extents or references.
+| Padding | n | 0x00 literal | padded with 0x00 to blocksize boundary 
 ### Extent Block data
 Raw data - length in blocks * block length.  If the archive is created on the same filesystem as the source file, this can be reflinked, rather than copied.
 
