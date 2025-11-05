@@ -13,14 +13,17 @@ use std::path::{Path, PathBuf};
 struct CachedExtent {
     extent_id: u64,
     data: Vec<u8>,
+    /// File path and offset where this extent was written (for reflinks)
+    file_location: Option<(PathBuf, u64)>,
 }
 
 /// Archive extractor
 pub struct ArchiveExtractor<R: Read + Seek> {
     reader: BufReader<R>,
     block_size: u32,
-    extent_cache: HashMap<u64, CachedExtent>, // Maps extent_id to data
+    extent_cache: HashMap<u64, CachedExtent>, // Maps extent_id to cached data
     output_dir: PathBuf,
+    current_file_path: Option<PathBuf>, // Track current file being extracted
 }
 
 impl<R: Read + Seek> ArchiveExtractor<R> {
@@ -36,6 +39,7 @@ impl<R: Read + Seek> ArchiveExtractor<R> {
             block_size: header.block_size,
             extent_cache: HashMap::new(),
             output_dir,
+            current_file_path: None,
         })
     }
 
@@ -97,7 +101,9 @@ impl<R: Read + Seek> ArchiveExtractor<R> {
                     file.write_all(&file_header.inline_data)?;
                 } else if file_header.file_size > 0 {
                     // Large file with extents
+                    self.current_file_path = Some(output_path.clone());
                     self.extract_file_with_extents(&output_path, file_header.file_size)?;
+                    self.current_file_path = None;
                 } else {
                     // Empty file
                     File::create(&output_path)?;
@@ -156,12 +162,14 @@ impl<R: Read + Seek> ArchiveExtractor<R> {
                     output_file.seek(SeekFrom::Start(current_offset))?;
                     output_file.write_all(&data)?;
 
-                    // Cache this extent for potential references
+                    // Cache this extent for potential references (with file location for reflinks)
+                    let file_location = self.current_file_path.clone().map(|p| (p, current_offset));
                     self.extent_cache.insert(
                         extent_header.extent_id,
                         CachedExtent {
                             extent_id: extent_header.extent_id,
                             data: data.clone(),
+                            file_location,
                         },
                     );
 
@@ -175,9 +183,44 @@ impl<R: Read + Seek> ArchiveExtractor<R> {
                 ExtentType::Reference => {
                     // Reference to earlier extent
                     if let Some(cached) = self.extent_cache.get(&extent_header.extent_id) {
-                        output_file.seek(SeekFrom::Start(current_offset))?;
-                        output_file.write_all(&cached.data)?;
-                        current_offset += cached.data.len() as u64;
+                        let data_size = cached.data.len() as u64;
+                        let mut reflink_used = false;
+
+                        // Try to use reflink if we have file location information
+                        if let Some((ref source_path, source_offset)) = cached.file_location {
+                            // Try to open the source file and use FICLONERANGE
+                            if let Ok(source_file) = File::open(source_path) {
+                                output_file.flush()?; // Ensure file is on disk
+
+                                match crate::reflink::try_reflink_range(
+                                    &source_file,
+                                    source_offset,
+                                    &output_file,
+                                    current_offset,
+                                    data_size,
+                                ) {
+                                    Ok(true) => {
+                                        // Reflink succeeded!
+                                        reflink_used = true;
+                                    }
+                                    Ok(false) => {
+                                        // Reflink not supported, will fall back to copy
+                                    }
+                                    Err(e) => {
+                                        // Reflink failed, will fall back to copy
+                                        eprintln!("Warning: reflink failed ({}), falling back to copy", e);
+                                    }
+                                }
+                            }
+                        }
+
+                        // Fall back to regular copy if reflink didn't work
+                        if !reflink_used {
+                            output_file.seek(SeekFrom::Start(current_offset))?;
+                            output_file.write_all(&cached.data)?;
+                        }
+
+                        current_offset += data_size;
                     } else {
                         anyhow::bail!(
                             "Reference to unknown extent ID: {}",

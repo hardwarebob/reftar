@@ -204,8 +204,9 @@ impl<W: Write + Seek> ArchiveCreator<W> {
             file.seek(SeekFrom::Start(block_offset))?;
             let bytes_read = file.read(&mut block_data[..block_len])?;
 
-            // Calculate checksum
-            let checksum = crc32fast::hash(&block_data[..bytes_read]);
+            // Calculate checksum on the full block (including padding)
+            // This must match what we write and what extraction will verify
+            let checksum = crc32fast::hash(&block_data);
 
             // Check if this block is a duplicate (could be referenced)
             let (extent_id, extent_type) = if let Some(existing) = self.extent_map.get(&checksum) {
@@ -231,6 +232,7 @@ impl<W: Write + Seek> ArchiveCreator<W> {
 
             // Write data if not a reference
             if extent_type == ExtentType::Data {
+                // Write the full block (padded to block_size)
                 self.writer.write_all(&block_data)?;
 
                 // Track this extent for future references
