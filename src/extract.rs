@@ -11,7 +11,6 @@ use std::path::{Path, PathBuf};
 /// Extent data cache for resolving references
 #[derive(Debug, Clone)]
 struct CachedExtent {
-    extent_id: u64,
     data: Vec<u8>,
     /// File path and offset where this extent was written (for reflinks)
     file_location: Option<(PathBuf, u64)>,
@@ -167,7 +166,6 @@ impl<R: Read + Seek> ArchiveExtractor<R> {
                     self.extent_cache.insert(
                         extent_header.extent_id,
                         CachedExtent {
-                            extent_id: extent_header.extent_id,
                             data: data.clone(),
                             file_location,
                         },

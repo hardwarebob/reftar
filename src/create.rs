@@ -13,9 +13,13 @@ use std::path::{Path, PathBuf};
 #[derive(Debug, Clone)]
 pub struct ExtentInfo {
     pub extent_id: u64,
+    #[allow(dead_code)]
     pub file_path: PathBuf,
+    #[allow(dead_code)]
     pub offset: u64,
+    #[allow(dead_code)]
     pub length: u64,
+    #[allow(dead_code)]
     pub checksum: u32,
 }
 
@@ -25,6 +29,7 @@ pub struct ArchiveCreator<W: Write + Seek> {
     block_size: u32,
     extent_map: HashMap<u32, ExtentInfo>, // Maps checksum to extent info
     next_extent_id: u64,
+    #[allow(dead_code)]
     source_file: Option<File>, // Keep track of source file for reflinks
 }
 

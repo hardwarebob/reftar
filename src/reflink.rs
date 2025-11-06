@@ -8,6 +8,7 @@ use std::fs::File;
 use std::os::unix::io::AsRawFd;
 
 /// Check if two files are on the same filesystem
+#[allow(dead_code)]
 pub fn same_filesystem(file1: &File, file2: &File) -> Result<bool> {
     use nix::sys::stat::fstat;
 
@@ -117,7 +118,6 @@ pub fn get_filesystem_id(file: &File) -> Result<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
     use tempfile::NamedTempFile;
 
     #[test]
