@@ -112,7 +112,7 @@ pub fn get_filesystem_id(file: &File) -> Result<u64> {
     use nix::sys::stat::fstat;
 
     let stat = fstat(file.as_raw_fd())?;
-    Ok(stat.st_dev)
+    Ok(stat.st_dev as u64)
 }
 
 #[cfg(test)]
