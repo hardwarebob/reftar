@@ -26,26 +26,31 @@ jobs:
           - target: x86_64-unknown-linux-gnu
             os: ubuntu-latest
             name: reftar-linux-x86_64.tar.gz
+            use_cross: false
 
           # Linux x86_64 with musl (static binary)
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             name: reftar-linux-x86_64-musl.tar.gz
+            use_cross: false
 
-          # Linux ARM64
+          # Linux ARM64 (using cross)
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-latest
             name: reftar-linux-aarch64.tar.gz
+            use_cross: true
 
           # macOS x86_64
           - target: x86_64-apple-darwin
             os: macos-latest
             name: reftar-macos-x86_64.tar.gz
+            use_cross: false
 
           # macOS ARM64 (Apple Silicon)
           - target: aarch64-apple-darwin
             os: macos-latest
             name: reftar-macos-aarch64.tar.gz
+            use_cross: false
 
     steps:
     - name: Checkout code
@@ -56,17 +61,24 @@ jobs:
       with:
         targets: ${{ matrix.target }}
 
-    - name: Install cross-compilation tools
-      if: matrix.os == 'ubuntu-latest'
+    - name: Install cross
+      if: matrix.use_cross == true
+      run: |
+        cargo install cross --git https://github.com/cross-rs/cross
+
+    - name: Install musl-tools
+      if: matrix.target == 'x86_64-unknown-linux-musl'
       run: |
         sudo apt-get update
-        if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
-          sudo apt-get install -y musl-tools
-        elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-        fi
+        sudo apt-get install -y musl-tools
 
-    - name: Build
+    - name: Build (using cross)
+      if: matrix.use_cross == true
+      run: |
+        cross build --release --target ${{ matrix.target }}
+
+    - name: Build (using cargo)
+      if: matrix.use_cross == false
       run: |
         cargo build --release --target ${{ matrix.target }}
 
