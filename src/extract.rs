@@ -338,11 +338,11 @@ mod tests {
     #[test]
     fn test_extract_empty_archive() {
         // Create an empty archive
-        let mut buf = Vec::new();
-        {
-            let creator = ArchiveCreator::new(Cursor::new(&mut buf), None).unwrap();
-            creator.finish().unwrap();
-        }
+        let buf = Vec::new();
+        let cursor = Cursor::new(buf);
+        let creator = ArchiveCreator::new(cursor, None).unwrap();
+        let cursor = creator.finish().unwrap();
+        let buf = cursor.into_inner();
 
         // Extract the empty archive
         let temp_dir = TempDir::new().unwrap();

@@ -258,9 +258,15 @@ impl<W: Write + Seek> ArchiveCreator<W> {
     }
 
     /// Flush and finish writing the archive
-    pub fn finish(mut self) -> Result<()> {
+    pub fn finish(mut self) -> Result<W> {
         self.writer.flush()?;
-        Ok(())
+        match self.writer.into_inner() {
+            Ok(writer) => Ok(writer),
+            Err(e) => {
+                // If we can't unwrap the writer, return the underlying IO error
+                Err(anyhow::anyhow!("Failed to finish archive: {}", e.error()))
+            }
+        }
     }
 }
 

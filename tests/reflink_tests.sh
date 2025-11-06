@@ -54,14 +54,14 @@ run_test() {
 
 pass_test() {
     echo -e "${GREEN}✓ PASSED${NC}"
-    ((TESTS_PASSED++))
+    ((TESTS_PASSED++)) || true
     echo
 }
 
 fail_test() {
     local msg="$1"
     echo -e "${RED}✗ FAILED: $msg${NC}"
-    ((TESTS_FAILED++))
+    ((TESTS_FAILED++)) || true
     echo
 }
 
@@ -82,16 +82,24 @@ check_shared_extents() {
 
     # Use filefrag to check for shared extents
     if command -v filefrag &> /dev/null; then
-        local extents1=$(filefrag -v "$file1" 2>/dev/null | grep -c "shared" || echo "0")
-        local extents2=$(filefrag -v "$file2" 2>/dev/null | grep -c "shared" || echo "0")
+        # Get physical block locations for both files
+        local phys1=$(filefrag -v "$file1" 2>/dev/null | grep "^ *0:" | awk '{print $4}' | sed 's/\.\.$//')
+        local phys2=$(filefrag -v "$file2" 2>/dev/null | grep "^ *0:" | awk '{print $4}' | sed 's/\.\.$//')
 
-        if [ "$extents1" -gt 0 ] || [ "$extents2" -gt 0 ]; then
+        # If both files have the same physical block location, they share extents
+        if [ -n "$phys1" ] && [ -n "$phys2" ] && [ "$phys1" = "$phys2" ]; then
+            return 0  # Files share extents
+        fi
+
+        # Alternative: check for "shared" flag in filefrag output
+        local shared1=$(filefrag -v "$file1" 2>/dev/null | grep -c "shared" || echo "0")
+        local shared2=$(filefrag -v "$file2" 2>/dev/null | grep -c "shared" || echo "0")
+
+        if [ "$shared1" -gt 0 ] && [ "$shared2" -gt 0 ]; then
             return 0  # Files share extents
         fi
     fi
 
-    # Alternative: check if files have same physical blocks using debugfs/filefrag
-    # For now, we'll just check if cp --reflink works
     return 1
 }
 
@@ -130,28 +138,44 @@ fi
 # ============================================================================
 run_test "Verifying reflinked files share extents"
 
-# Check disk usage - reflinked files should use minimal additional space
-SOURCE_SIZE=$(get_size "$TEST_DIR/source.bin")
-TOTAL_APPARENT=$((SOURCE_SIZE * 4))  # 4 files total
-
-# Get actual disk usage (in KB, then convert to bytes)
-ACTUAL_USAGE=$(du -sk "$TEST_DIR" | cut -f1)
-ACTUAL_USAGE=$((ACTUAL_USAGE * 1024))
-
-echo "  Source file size: $SOURCE_SIZE bytes"
-echo "  Total apparent size (4 files): $TOTAL_APPARENT bytes"
-echo "  Actual disk usage: $ACTUAL_USAGE bytes"
-
-# Actual usage should be significantly less than 4x the file size
-# Allow some overhead for metadata
-MAX_EXPECTED=$((SOURCE_SIZE * 2))  # Should be around 1x + metadata
-
-if [ "$ACTUAL_USAGE" -lt "$MAX_EXPECTED" ]; then
-    echo "  ✓ Reflinks are sharing data (using $(( (ACTUAL_USAGE * 100) / TOTAL_APPARENT ))% of apparent size)"
+# Use filefrag to verify that reflinked files actually share physical extents
+if ! command -v filefrag &> /dev/null; then
+    echo "  ⚠ filefrag not available, skipping extent verification"
     pass_test
 else
-    echo "  ✗ Files don't appear to be sharing data efficiently"
-    fail_test "Disk usage too high for reflinked files"
+    # Get physical extent information for all files
+    echo "  Checking physical extent locations with filefrag..."
+
+    # Check if reflink1, reflink2, and reflink3 share extents with source
+    SHARED_COUNT=0
+
+    if check_shared_extents "$TEST_DIR/source.bin" "$TEST_DIR/reflink1.bin"; then
+        echo "  ✓ reflink1.bin shares extents with source.bin"
+        ((SHARED_COUNT++)) || true
+    else
+        echo "  ✗ reflink1.bin does NOT share extents with source.bin"
+    fi
+
+    if check_shared_extents "$TEST_DIR/source.bin" "$TEST_DIR/reflink2.bin"; then
+        echo "  ✓ reflink2.bin shares extents with source.bin"
+        ((SHARED_COUNT++)) || true
+    else
+        echo "  ✗ reflink2.bin does NOT share extents with source.bin"
+    fi
+
+    if check_shared_extents "$TEST_DIR/source.bin" "$TEST_DIR/reflink3.bin"; then
+        echo "  ✓ reflink3.bin shares extents with source.bin"
+        ((SHARED_COUNT++)) || true
+    else
+        echo "  ✗ reflink3.bin does NOT share extents with source.bin"
+    fi
+
+    # All three reflinked files should share extents with source
+    if [ "$SHARED_COUNT" -eq 3 ]; then
+        pass_test
+    else
+        fail_test "Only $SHARED_COUNT out of 3 reflinked files share extents with source"
+    fi
 fi
 
 # ============================================================================
