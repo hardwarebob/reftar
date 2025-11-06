@@ -1,0 +1,168 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version tag (e.g., v0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: reftar-linux-x86_64.tar.gz
+
+          # Linux x86_64 with musl (static binary)
+          - target: x86_64-unknown-linux-musl
+            os: ubuntu-latest
+            name: reftar-linux-x86_64-musl.tar.gz
+
+          # Linux ARM64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            name: reftar-linux-aarch64.tar.gz
+
+          # macOS x86_64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            name: reftar-macos-x86_64.tar.gz
+
+          # macOS ARM64 (Apple Silicon)
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            name: reftar-macos-aarch64.tar.gz
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ matrix.target }}
+
+    - name: Install cross-compilation tools
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        if [[ "${{ matrix.target }}" == "x86_64-unknown-linux-musl" ]]; then
+          sudo apt-get install -y musl-tools
+        elif [[ "${{ matrix.target }}" == "aarch64-unknown-linux-gnu" ]]; then
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+        fi
+
+    - name: Build
+      run: |
+        cargo build --release --target ${{ matrix.target }}
+
+    - name: Package binary
+      run: |
+        cd target/${{ matrix.target }}/release
+        tar czf ../../../${{ matrix.name }} reftar
+        cd -
+
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.name }}
+        path: ${{ matrix.name }}
+        if-no-files-found: error
+
+  create-release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+
+    - name: Display structure of downloaded files
+      run: ls -R artifacts
+
+    - name: Get version from tag or input
+      id: get_version
+      run: |
+        if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_OUTPUT
+        else
+          echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Generate checksums
+      run: |
+        cd artifacts
+        for dir in */; do
+          cd "$dir"
+          for file in *; do
+            sha256sum "$file" >> ../../checksums.txt
+          done
+          cd ..
+        done
+        cd ..
+        cat checksums.txt
+
+    - name: Create Release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: ${{ steps.get_version.outputs.VERSION }}
+        name: Release ${{ steps.get_version.outputs.VERSION }}
+        draft: false
+        prerelease: false
+        generate_release_notes: true
+        files: |
+          artifacts/**/*
+          checksums.txt
+        body: |
+          ## reftar ${{ steps.get_version.outputs.VERSION }}
+
+          A tar-like utility with support for reflinks and shared data blocks.
+
+          ### Installation
+
+          Download the appropriate binary for your platform below and extract it:
+
+          ```bash
+          # Linux x86_64
+          tar xzf reftar-linux-x86_64.tar.gz
+          sudo mv reftar /usr/local/bin/
+
+          # macOS (Intel)
+          tar xzf reftar-macos-x86_64.tar.gz
+          sudo mv reftar /usr/local/bin/
+
+          # macOS (Apple Silicon)
+          tar xzf reftar-macos-aarch64.tar.gz
+          sudo mv reftar /usr/local/bin/
+          ```
+
+          ### Checksums
+
+          SHA256 checksums are available in `checksums.txt`.
+
+          ### What's Changed
+
+          See the changelog below for details.
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

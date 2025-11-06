@@ -24,9 +24,30 @@ See [File Format Documentation](docs/FILEFORMAT.md) for detailed information abo
 
 ## Installation
 
+### Binary Releases
+
+Pre-compiled binaries are available for multiple platforms. Download the latest release from the [Releases page](https://github.com/hardwarebob/reftar/releases).
+
+```bash
+# Linux x86_64
+wget https://github.com/hardwarebob/reftar/releases/latest/download/reftar-linux-x86_64.tar.gz
+tar xzf reftar-linux-x86_64.tar.gz
+sudo mv reftar /usr/local/bin/
+
+# macOS (Intel)
+wget https://github.com/hardwarebob/reftar/releases/latest/download/reftar-macos-x86_64.tar.gz
+tar xzf reftar-macos-x86_64.tar.gz
+sudo mv reftar /usr/local/bin/
+
+# macOS (Apple Silicon)
+wget https://github.com/hardwarebob/reftar/releases/latest/download/reftar-macos-aarch64.tar.gz
+tar xzf reftar-macos-aarch64.tar.gz
+sudo mv reftar /usr/local/bin/
+```
+
 ### Prerequisites
 
-- Rust 1.70 or later
+- Rust 1.70 or later (for building from source)
 - Linux (for reflink support via FICLONERANGE ioctl)
 
 ### Building from Source
@@ -37,7 +58,7 @@ cargo build --release
 
 The binary will be available at `target/release/reftar`.
 
-### Installing
+### Installing from Source
 
 ```bash
 cargo install --path .
